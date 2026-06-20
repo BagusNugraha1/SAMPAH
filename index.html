@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>5 Sekolah Terdekat</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+<style>
+#map{
+    height:600px;
+}
+</style>
+</head>
+<body>
+
+<h2>5 Sekolah Terdekat</h2>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+
+const lat = 3.615330135693644;
+const lon = 98.64258476181182;
+
+// Inisialisasi peta
+const map = L.map('map').setView([lat, lon], 14);
+
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap'
+}).addTo(map);
+
+// Marker pusat
+L.marker([lat, lon]).addTo(map).bindPopup("Lokasi Pusat");
+
+// Fungsi hitung jarak (Haversine)
+function getDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3; // meter
+    const φ1 = lat1 * Math.PI/180;
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+
+    const a =
+        Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+        Math.cos(φ1) * Math.cos(φ2) *
+        Math.sin(Δλ/2) * Math.sin(Δλ/2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c; // meter
+}
+
+// Ambil data sekolah
+const query = `
+[out:json];
+(
+ node["amenity"="school"](around:3000,${lat},${lon});
+ way["amenity"="school"](around:3000,${lat},${lon});
+ relation["amenity"="school"](around:3000,${lat},${lon});
+);
+out center;
+`;
+
+fetch("https://overpass-api.de/api/interpreter", {
+    method: "POST",
+    body: query
+})
+.then(res => res.json())
+.then(data => {
+
+    let sekolahList = [];
+
+    data.elements.forEach(s => {
+
+        const slat = s.lat || s.center?.lat;
+        const slon = s.lon || s.center?.lon;
+
+        if(!slat || !slon) return;
+
+        const jarak = getDistance(lat, lon, slat, slon);
+
+        sekolahList.push({
+            nama: s.tags?.name || "Sekolah",
+            lat: slat,
+            lon: slon,
+            jarak: jarak
+        });
+
+    });
+
+    // urutkan dari paling dekat
+    sekolahList.sort((a,b) => a.jarak - b.jarak);
+
+    // ambil 5 terdekat
+    sekolahList.slice(0,5).forEach(s => {
+
+        L.marker([s.lat, s.lon])
+        .addTo(map)
+        .bindPopup(
+            `<b>${s.nama}</b><br>Jarak: ${Math.round(s.jarak)} meter`
+        );
+
+    });
+
+});
+
+</script>
+
+</body>
+</html>
